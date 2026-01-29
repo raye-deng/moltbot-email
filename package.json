@@ -13,6 +13,10 @@
     "type": "git",
     "url": "https://github.com/raye-deng/moltbot-email.git"
   },
+  "homepage": "https://github.com/raye-deng/moltbot-email#readme",
+  "bugs": {
+    "url": "https://github.com/raye-deng/moltbot-email/issues"
+  },
   "keywords": [
     "moltbot",
     "clawdbot",
@@ -21,6 +25,35 @@
     "chat",
     "bot"
   ],
+  "files": [
+    "src",
+    "index.ts",
+    "moltbot.plugin.json",
+    "README.md"
+  ],
+  "clawdbot": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "email",
+      "label": "Email",
+      "selectionLabel": "Email (Gmail)",
+      "detailLabel": "Email",
+      "docsPath": "/channels/email",
+      "docsLabel": "email",
+      "blurb": "Email channel with Gmail support.",
+      "aliases": [
+        "gmail",
+        "mail"
+      ],
+      "order": 70
+    },
+    "install": {
+      "npmSpec": "moltbot-email",
+      "defaultChoice": "path"
+    }
+  },
   "author": "Raye Deng",
   "license": "MIT",
   "dependencies": {
@@ -29,19 +62,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
+    "clawdbot": "2026.1.24-3",
     "typescript": "^5.7.3",
     "vitest": "^3.0.2"
   },
   "peerDependencies": {
-    "moltbot": "*",
-    "clawdbot": "*"
-  },
-  "peerDependenciesMeta": {
-    "moltbot": {
-      "optional": true
-    },
-    "clawdbot": {
-      "optional": true
-    }
+    "clawdbot": ">=2026.1.24"
   }
 }
