@@ -1,6 +1,6 @@
 {
   "name": "moltbot-email",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Email (Gmail) channel plugin for Moltbot",
   "main": "index.ts",
   "type": "module",
