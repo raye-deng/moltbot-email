@@ -109,6 +109,15 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
     nativeCommands: false,
     blockStreaming: true,
   },
+  messaging: {
+    targetResolver: {
+      hint: "email@example.com",
+      looksLikeId: (raw: string) => {
+        // Email addresses are valid target IDs
+        return raw.includes("@") && raw.includes(".");
+      },
+    },
+  },
   reload: { configPrefixes: ["channels.email"] },
   configSchema: buildChannelConfigSchema(EmailConfigSchema),
   config: {
@@ -138,73 +147,209 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
     return { ok: true };
   },
 
-  async start({ cfg, account, core }) {
-    const runtime = getEmailRuntime();
-    if (!account.config.enabled || !account.credentials?.refreshToken) {
-      runtime?.log?.("[email] Not starting - disabled or missing credentials");
-      return;
-    }
-
-    try {
-      gmailClient = await createGmailClient(account.credentials);
-      runtime?.log?.("[email] Gmail client initialized");
-
-      const pollInterval = account.config.pollIntervalMs || 30000;
+  gateway: {
+    startAccount: async (ctx) => {
+      const { account, cfg, runtime, abortSignal } = ctx;
+      console.log("[email] startAccount() method called");
+      ctx.log?.info?.("[email] startAccount() method called");
       
-      const poll = async () => {
-        try {
-          const messages = await fetchNewMessages(gmailClient, "is:unread");
-          const allowFrom = account.config.allowFrom || [];
+      if (!account.config.enabled || !account.credentials?.refreshToken) {
+        console.log("[email] Not starting - disabled or missing credentials");
+        ctx.log?.info?.("[email] Not starting - disabled or missing credentials");
+        return;
+      }
 
-          for (const msg of messages) {
-            const senderEmail = extractEmailAddress(msg.from);
+      ctx.setStatus({
+        accountId: account.accountId,
+        running: true,
+        lastStartAt: Date.now(),
+      });
 
-            if (!isSenderAllowed(msg.from, allowFrom)) {
-              runtime?.log?.(`[email] Ignoring email from: ${senderEmail}`);
+      try {
+        gmailClient = await createGmailClient(account.credentials);
+        ctx.log?.info?.("[email] Gmail client initialized");
+
+        const pollInterval = account.config.pollIntervalMs || 30000;
+        
+        const poll = async () => {
+          try {
+            const messages = await fetchNewMessages(gmailClient, "is:unread");
+            const allowFrom = account.config.allowFrom || [];
+
+            for (const msg of messages) {
+              const senderEmail = extractEmailAddress(msg.from);
+
+              if (!isSenderAllowed(msg.from, allowFrom)) {
+                ctx.log?.debug?.(`[email] Ignoring email from: ${senderEmail}`);
+                await markAsRead(gmailClient, msg.id);
+                continue;
+              }
+
+              ctx.log?.info?.(`[email] New email from ${senderEmail}: ${msg.subject}`);
               await markAsRead(gmailClient, msg.id);
-              continue;
-            }
 
-            runtime?.log?.(`[email] New email from ${senderEmail}: ${msg.subject}`);
-            await markAsRead(gmailClient, msg.id);
+              const core = getEmailRuntime();
+              if (!core?.channel) {
+                ctx.log?.error?.("[email] Email runtime not available");
+                continue;
+              }
 
-            core.channel.routing.routeInbound({
-              cfg,
-              channel: "email",
-              accountId: DEFAULT_ACCOUNT_ID,
-              chatId: msg.threadId,
-              route: core.channel.routing.resolveAgentRoute({
-                cfg,
+              // Resolve agent route
+              const route = core.channel.routing.resolveAgentRoute({
+                cfg: cfg as MoltbotConfig,
                 channel: "email",
+                accountId: DEFAULT_ACCOUNT_ID,
                 peer: { kind: "dm", id: senderEmail },
-              }),
-              message: msg.body,
-              senderId: senderEmail,
-              senderLabel: senderEmail,
-              isGroup: false,
-              replyTo: msg.threadId,
-            });
-          }
-        } catch (error: any) {
-          runtime?.log?.(`[email] Poll error: ${error.message}`);
-        }
-      };
+              });
 
-      pollTimer = setInterval(poll, pollInterval);
-      await poll(); // Initial poll
-      runtime?.log?.(`[email] Polling started (interval: ${pollInterval}ms)`);
-    } catch (error: any) {
-      runtime?.log?.(`[email] Failed to start: ${error.message}`);
-    }
+              // Get store path and format envelope
+              const storePath = core.channel.session.resolveStorePath((cfg as MoltbotConfig).session?.store, {
+                agentId: route.agentId,
+              });
+              const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg as MoltbotConfig);
+              const previousTimestamp = core.channel.session.readSessionUpdatedAt({
+                storePath,
+                sessionKey: route.sessionKey,
+              });
+
+              const body = core.channel.reply.formatAgentEnvelope({
+                channel: "Email",
+                from: senderEmail,
+                timestamp: Date.now(),
+                previousTimestamp,
+                envelope: envelopeOptions,
+                body: msg.body,
+              });
+
+              // Create inbound context
+              const ctxPayload = core.channel.reply.finalizeInboundContext({
+                Body: body,
+                RawBody: msg.body,
+                CommandBody: msg.body,
+                From: `email:${senderEmail}`,
+                To: `email:${msg.threadId}`,
+                SessionKey: route.sessionKey,
+                AccountId: route.accountId,
+                ChatType: "direct",
+                ConversationLabel: senderEmail,
+                SenderId: senderEmail,
+                Provider: "email",
+                Surface: "email",
+                MessageSid: msg.id,
+                MessageSidFull: msg.id,
+                OriginatingChannel: "email",
+                OriginatingTo: `email:${senderEmail}`,
+              });
+
+              // Record session meta
+              void core.channel.session
+                .recordSessionMetaFromInbound({
+                  storePath,
+                  sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+                  ctx: ctxPayload,
+                })
+                .catch((err) => {
+                  ctx.log?.error?.(`[email] Failed updating session meta: ${String(err)}`);
+                });
+
+              // Dispatch and get reply
+              await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+                ctx: ctxPayload,
+                cfg: cfg as MoltbotConfig,
+                dispatcherOptions: {
+                  deliver: async (payload) => {
+                    // Send reply via email
+                    if (payload.text) {
+                      try {
+                        const subject = `Re: ${msg.subject || "[Moltbot] Message"}`;
+                        await sendEmail(gmailClient, senderEmail, subject, payload.text);
+                        ctx.log?.info?.(`[email] Sent reply to ${senderEmail}`);
+                      } catch (err: any) {
+                        ctx.log?.error?.(`[email] Failed to send reply: ${err.message}`);
+                      }
+                    }
+                  },
+                  onError: (err, info) => {
+                    ctx.log?.error?.(`[email] Reply ${info.kind} failed: ${String(err)}`);
+                  },
+                },
+              });
+            }
+          } catch (error: any) {
+            ctx.log?.error?.(`[email] Poll error: ${error.message}`);
+          }
+        };
+
+        pollTimer = setInterval(poll, pollInterval);
+        await poll(); // Initial poll
+        ctx.log?.info?.(`[email] Polling started (interval: ${pollInterval}ms)`);
+
+        // Return cleanup function
+        return () => {
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = undefined;
+          }
+          gmailClient = null;
+          ctx.log?.info?.("[email] Stopped");
+          ctx.setStatus({
+            accountId: account.accountId,
+            running: false,
+          });
+        };
+      } catch (error: any) {
+        ctx.log?.error?.(`[email] Failed to start: ${error.message}`);
+        ctx.setStatus({
+          accountId: account.accountId,
+          running: false,
+          error: error.message,
+        });
+      }
+    },
   },
 
-  async stop() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = undefined;
-    }
-    gmailClient = null;
-    getEmailRuntime()?.log?.("[email] Stopped");
+  outbound: {
+    textChunkLimit: 50000,
+    resolveTarget: ({ to, allowFrom }) => {
+      if (to && typeof to === "string" && to.includes("@")) {
+        return { ok: true, to };
+      }
+      const emails = (allowFrom ?? []).filter((e): e is string => typeof e === "string" && e.includes("@"));
+      if (emails.length > 0) {
+        return { ok: true, to: emails[0] };
+      }
+      return { ok: false, error: "No valid email target" };
+    },
+    sendText: async ({ cfg, to, text }) => {
+      const config = getEmailConfig(cfg as MoltbotConfig);
+      // Auto-initialize Gmail client if not already done
+      if (!gmailClient && config?.credentials?.refreshToken) {
+        try {
+          gmailClient = await createGmailClient(config.credentials);
+          getEmailRuntime()?.log?.("[email] Gmail client auto-initialized for outbound");
+        } catch (err: any) {
+          throw new Error(`Failed to initialize Gmail client: ${err.message}`);
+        }
+      }
+      if (!gmailClient) {
+        throw new Error("Gmail client not initialized - check credentials");
+      }
+      const allowTo = config?.allowTo || [];
+      if (!isRecipientAllowed(to, allowTo)) {
+        throw new Error(`Recipient ${to} not allowed`);
+      }
+      const subject = `${config?.subjectPrefix || "[Moltbot]"} Message`;
+      const messageId = await sendEmail(gmailClient, to, subject, text);
+      getEmailRuntime()?.log?.(`[email] Sent to ${to} (id: ${messageId})`);
+      return {
+        channel: "email",
+        messageId: messageId || "",
+        chatId: to,
+      };
+    },
+    sendMedia: async ({ to }) => {
+      throw new Error(`Email channel does not support media attachments to ${to}`);
+    },
   },
 
   async send({ account, to, text }) {
@@ -231,16 +376,5 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
       getEmailRuntime()?.log?.(`[email] Send failed: ${error.message}`);
       return { ok: false, error: error.message };
     }
-  },
-
-  resolveTarget({ to, allowFrom }) {
-    if (to && typeof to === "string" && to.includes("@")) {
-      return { ok: true, target: to };
-    }
-    const emails = (allowFrom ?? []).filter((e): e is string => typeof e === "string" && e.includes("@"));
-    if (emails.length > 0) {
-      return { ok: true, target: emails[0] };
-    }
-    return { ok: false, error: "No valid email target" };
   },
 };
