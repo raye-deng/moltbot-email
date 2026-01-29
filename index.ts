@@ -1,9 +1,18 @@
-import type { PluginExports } from "moltbot/plugin-sdk";
-export type { EmailChannelConfig } from "./src/types.js";
+import type { MoltbotPluginApi } from "clawdbot/plugin-sdk";
+import { emptyPluginConfigSchema } from "clawdbot/plugin-sdk";
 
-export const plugin: PluginExports = {
-  async load(ctx) {
-    const { registerChannel } = await import("./src/channel.js");
-    registerChannel(ctx);
+import { emailPlugin, emailDock } from "./src/channel.js";
+import { setEmailRuntime } from "./src/runtime.js";
+
+const plugin = {
+  id: "moltbot-email",
+  name: "Email (Gmail)",
+  description: "Moltbot Email channel plugin with Gmail support",
+  configSchema: emptyPluginConfigSchema(),
+  register(api: MoltbotPluginApi) {
+    setEmailRuntime(api.runtime);
+    api.registerChannel({ plugin: emailPlugin, dock: emailDock });
   },
 };
+
+export default plugin;
