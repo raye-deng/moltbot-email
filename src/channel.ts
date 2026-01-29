@@ -1,9 +1,11 @@
 import {
   DEFAULT_ACCOUNT_ID,
+  buildChannelConfigSchema,
   type ChannelDock,
   type ChannelPlugin,
   type MoltbotConfig,
 } from "clawdbot/plugin-sdk";
+import { z } from "zod";
 
 import type { EmailChannelConfig, EmailCredentials } from "./types.js";
 import { getEmailRuntime } from "./runtime.js";
@@ -37,6 +39,22 @@ function isRecipientAllowed(recipient: string, allowTo: string[]): boolean {
   return allowTo.some((allowed) => recipientEmail === allowed.toLowerCase());
 }
 
+// Config schema for email channel
+const EmailConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  credentials: z.object({
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
+    refreshToken: z.string().optional(),
+    redirectUri: z.string().optional(),
+  }).optional(),
+  allowFrom: z.array(z.string()).optional(),
+  allowTo: z.array(z.string()).optional(),
+  pollIntervalMs: z.number().optional(),
+  subjectPrefix: z.string().optional(),
+  defaultRecipient: z.string().optional(),
+});
+
 export const emailDock: ChannelDock = {
   id: "email",
   capabilities: {
@@ -57,14 +75,18 @@ interface ResolvedEmailAccount {
   accountId: string;
   config: EmailChannelConfig;
   credentials: EmailCredentials | null;
+  enabled: boolean;
+  name?: string;
 }
 
-function resolveEmailAccount(cfg: MoltbotConfig): ResolvedEmailAccount {
+function resolveEmailAccount(cfg: MoltbotConfig, accountId?: string): ResolvedEmailAccount {
   const config = getEmailConfig(cfg) ?? {};
   return {
-    accountId: DEFAULT_ACCOUNT_ID,
+    accountId: accountId || DEFAULT_ACCOUNT_ID,
     config,
     credentials: config.credentials ?? null,
+    enabled: config.enabled ?? false,
+    name: "Gmail",
   };
 }
 
@@ -79,10 +101,28 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
     blurb: "Email channel with Gmail support.",
     order: 70,
   },
-
-  resolveAccount: ({ cfg }) => resolveEmailAccount(cfg as MoltbotConfig),
-  listAccountIds: () => [DEFAULT_ACCOUNT_ID],
-  resolveDefaultAccountId: () => DEFAULT_ACCOUNT_ID,
+  capabilities: {
+    chatTypes: ["direct"],
+    reactions: false,
+    threads: true,
+    media: false,
+    nativeCommands: false,
+    blockStreaming: true,
+  },
+  reload: { configPrefixes: ["channels.email"] },
+  configSchema: buildChannelConfigSchema(EmailConfigSchema),
+  config: {
+    listAccountIds: () => [DEFAULT_ACCOUNT_ID],
+    resolveAccount: (cfg, accountId) => resolveEmailAccount(cfg as MoltbotConfig, accountId),
+    defaultAccountId: () => DEFAULT_ACCOUNT_ID,
+    isConfigured: (account) => Boolean(account.credentials?.refreshToken),
+    describeAccount: (account) => ({
+      accountId: account.accountId,
+      name: account.name,
+      enabled: account.enabled,
+      configured: Boolean(account.credentials?.refreshToken),
+    }),
+  },
 
   async probe({ account }) {
     if (!account.config.enabled) {
