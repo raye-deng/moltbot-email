@@ -39,6 +39,50 @@ function isRecipientAllowed(recipient: string, allowTo: string[]): boolean {
   return allowTo.some((allowed) => recipientEmail === allowed.toLowerCase());
 }
 
+/**
+ * Generate a dynamic email subject from reply content
+ * Extracts the first meaningful line or sentence as the subject
+ */
+function generateSubjectFromContent(content: string, prefix?: string): string {
+  const maxLength = 60;
+  
+  // Remove markdown formatting
+  let text = content
+    .replace(/\*\*(.+?)\*\*/g, "$1")  // Bold
+    .replace(/\*(.+?)\*/g, "$1")       // Italic
+    .replace(/`(.+?)`/g, "$1")         // Code
+    .replace(/^#+\s*/gm, "")           // Headers
+    .replace(/^\s*[-*]\s*/gm, "")      // List items
+    .replace(/\[来自.*?\]/g, "")       // Remove signature
+    .trim();
+  
+  // Get first line or sentence
+  const firstLine = text.split(/[\n\r]/)[0]?.trim() || "";
+  const firstSentence = firstLine.split(/[。！？.!?]/)[0]?.trim() || firstLine;
+  
+  // Use first sentence if it's reasonable length, otherwise first line
+  let subject = firstSentence.length > 10 && firstSentence.length <= maxLength 
+    ? firstSentence 
+    : firstLine;
+  
+  // Truncate if too long
+  if (subject.length > maxLength) {
+    subject = subject.substring(0, maxLength - 3) + "...";
+  }
+  
+  // Fallback if empty
+  if (!subject) {
+    subject = "Message from Moltbot";
+  }
+  
+  // Add prefix if configured
+  if (prefix) {
+    return `${prefix} ${subject}`;
+  }
+  
+  return subject;
+}
+
 // Config schema for email channel
 const EmailConfigSchema = z.object({
   enabled: z.boolean().optional(),
@@ -273,7 +317,8 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
                     // Send reply via email for final replies
                     if (payload.text) {
                       try {
-                        const subject = `Re: ${msg.subject || "[Moltbot] Message"}`;
+                        // Generate dynamic subject from reply content
+                        const subject = generateSubjectFromContent(payload.text, account.config.subjectPrefix);
                         await sendEmail(gmailClient, senderEmail, subject, payload.text, msg.threadId);
                         ctx.log?.info?.(`[email] Sent ${info.kind} reply to ${senderEmail} (${payload.text.length} chars)`);
                       } catch (err: any) {
@@ -353,7 +398,8 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
       if (!isRecipientAllowed(to, allowTo)) {
         throw new Error(`Recipient ${to} not allowed`);
       }
-      const subject = `${config?.subjectPrefix || "[Moltbot]"} Message`;
+      // Generate dynamic subject from content
+      const subject = generateSubjectFromContent(text, config?.subjectPrefix);
       const messageId = await sendEmail(gmailClient, to, subject, text);
       getEmailRuntime()?.log?.(`[email] Sent to ${to} (id: ${messageId})`);
       return {
