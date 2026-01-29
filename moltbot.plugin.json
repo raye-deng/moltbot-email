@@ -1,0 +1,108 @@
+{
+  "id": "moltbot-email",
+  "name": "Email (Gmail)",
+  "description": "Email channel plugin for Moltbot with Gmail support",
+  "channels": ["email"],
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Email"
+    },
+    "credentials": {
+      "label": "Gmail OAuth2 Credentials",
+      "advanced": true
+    },
+    "credentials.clientId": {
+      "label": "Client ID",
+      "placeholder": "Your Google OAuth2 Client ID",
+      "sensitive": true
+    },
+    "credentials.clientSecret": {
+      "label": "Client Secret",
+      "placeholder": "Your Google OAuth2 Client Secret",
+      "sensitive": true
+    },
+    "credentials.refreshToken": {
+      "label": "Refresh Token",
+      "placeholder": "OAuth2 Refresh Token",
+      "sensitive": true,
+      "help": "Run 'moltbot email auth' to generate this token"
+    },
+    "allowFrom": {
+      "label": "Allowed Senders",
+      "help": "Email addresses allowed to send messages to the bot",
+      "placeholder": "user@example.com"
+    },
+    "allowTo": {
+      "label": "Allowed Recipients",
+      "help": "Email addresses the bot can send messages to",
+      "placeholder": "user@example.com"
+    },
+    "pollIntervalMs": {
+      "label": "Poll Interval (ms)",
+      "placeholder": "30000",
+      "help": "How often to check for new emails (default: 30 seconds)",
+      "advanced": true
+    },
+    "subjectPrefix": {
+      "label": "Subject Prefix",
+      "placeholder": "[Moltbot]",
+      "help": "Prefix added to outgoing email subjects",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the Email channel"
+      },
+      "credentials": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "clientSecret": {
+            "type": "string"
+          },
+          "refreshToken": {
+            "type": "string"
+          },
+          "redirectUri": {
+            "type": "string"
+          }
+        }
+      },
+      "allowFrom": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Email addresses allowed to send messages"
+      },
+      "allowTo": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Email addresses the bot can send messages to"
+      },
+      "pollIntervalMs": {
+        "type": "integer",
+        "minimum": 5000,
+        "description": "Poll interval in milliseconds"
+      },
+      "subjectPrefix": {
+        "type": "string",
+        "description": "Prefix for outgoing email subjects"
+      },
+      "defaultRecipient": {
+        "type": "string",
+        "description": "Default recipient for outgoing messages"
+      }
+    }
+  }
+}

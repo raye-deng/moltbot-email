@@ -1,0 +1,47 @@
+{
+  "name": "moltbot-email",
+  "version": "1.0.0",
+  "description": "Email (Gmail) channel plugin for Moltbot",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raye-deng/moltbot-email.git"
+  },
+  "keywords": [
+    "moltbot",
+    "clawdbot",
+    "email",
+    "gmail",
+    "chat",
+    "bot"
+  ],
+  "author": "Raye Deng",
+  "license": "MIT",
+  "dependencies": {
+    "googleapis": "^144.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.2"
+  },
+  "peerDependencies": {
+    "moltbot": "*",
+    "clawdbot": "*"
+  },
+  "peerDependenciesMeta": {
+    "moltbot": {
+      "optional": true
+    },
+    "clawdbot": {
+      "optional": true
+    }
+  }
+}
