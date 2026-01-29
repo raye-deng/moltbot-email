@@ -67,7 +67,7 @@ export const emailDock: ChannelDock = {
   outbound: { textChunkLimit: 50000 },
   config: {
     resolveAllowFrom: ({ cfg }) => getEmailConfig(cfg as MoltbotConfig)?.allowFrom ?? [],
-    formatAllowFrom: ({ allowFrom }) => allowFrom.filter(Boolean).join(", "),
+    formatAllowFrom: ({ allowFrom }) => allowFrom.filter(Boolean),
   },
 };
 
