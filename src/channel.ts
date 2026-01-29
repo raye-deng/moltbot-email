@@ -194,12 +194,14 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
                 continue;
               }
 
-              // Resolve agent route
+              // Resolve agent route - use "group" kind to ensure separate session per email
+              // When peerKind is "dm" and dmScope is "main" (default), it routes to main session
+              // Using "group" ensures each email address gets its own session
               const route = core.channel.routing.resolveAgentRoute({
                 cfg: cfg as MoltbotConfig,
                 channel: "email",
                 accountId: DEFAULT_ACCOUNT_ID,
-                peer: { kind: "dm", id: senderEmail },
+                peer: { kind: "group", id: senderEmail },
               });
 
               // Get store path and format envelope
