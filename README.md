@@ -14,11 +14,19 @@ Email (Gmail) channel plugin for Moltbot.
 
 ## Installation
 
+**From npm (recommended):**
+
+```bash
+npm install moltbot-email
+```
+
+**From GitHub:**
+
 ```bash
 moltbot plugin install github:raye-deng/moltbot-email
 ```
 
-Or add to your `moltbot.json`:
+**Manual:** Add to your `moltbot.json`:
 
 ```json
 {
@@ -172,11 +180,19 @@ Moltbot 的 Email (Gmail) 频道插件。
 
 ## 安装
 
+**从 npm 安装（推荐）：**
+
+```bash
+npm install moltbot-email
+```
+
+**从 GitHub 安装：**
+
 ```bash
 moltbot plugin install github:raye-deng/moltbot-email
 ```
 
-或者在 `moltbot.json` 中添加：
+**手动安装：** 在 `moltbot.json` 中添加：
 
 ```json
 {
