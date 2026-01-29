@@ -1,4 +1,4 @@
-import type { MoltbotConfig } from "moltbot/plugin-sdk";
+import type { MoltbotConfig } from "clawdbot/plugin-sdk";
 
 export interface EmailCredentials {
   clientId: string;

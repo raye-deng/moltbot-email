@@ -221,51 +221,62 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
                 body: msg.body,
               });
 
-              // Create inbound context
+              // Create inbound context - use senderEmail consistently for To field
               const ctxPayload = core.channel.reply.finalizeInboundContext({
                 Body: body,
                 RawBody: msg.body,
                 CommandBody: msg.body,
+                BodyForAgent: msg.body,
                 From: `email:${senderEmail}`,
-                To: `email:${msg.threadId}`,
+                To: senderEmail,  // Use consistent sender email, not thread ID
                 SessionKey: route.sessionKey,
                 AccountId: route.accountId,
                 ChatType: "direct",
                 ConversationLabel: senderEmail,
                 SenderId: senderEmail,
+                SenderName: msg.from,  // Include full sender name
                 Provider: "email",
                 Surface: "email",
                 MessageSid: msg.id,
                 MessageSidFull: msg.id,
                 OriginatingChannel: "email",
-                OriginatingTo: `email:${senderEmail}`,
+                OriginatingTo: senderEmail,
+                // Add timestamp for envelope formatting
+                Timestamp: Date.now(),
               });
 
-              // Record session meta
-              void core.channel.session
-                .recordSessionMetaFromInbound({
+              ctx.log?.info?.(`[email] Processing message - sessionKey: ${route.sessionKey}, agentId: ${route.agentId}`);
+
+              // Record session meta - await to ensure it's recorded before dispatch
+              try {
+                await core.channel.session.recordSessionMetaFromInbound({
                   storePath,
                   sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
                   ctx: ctxPayload,
-                })
-                .catch((err) => {
-                  ctx.log?.error?.(`[email] Failed updating session meta: ${String(err)}`);
                 });
+                ctx.log?.debug?.(`[email] Session meta recorded for ${route.sessionKey}`);
+              } catch (err) {
+                ctx.log?.error?.(`[email] Failed updating session meta: ${String(err)}`);
+              }
 
               // Dispatch and get reply
-              await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+              ctx.log?.info?.(`[email] Starting dispatch for message from ${senderEmail}`);
+              const dispatchResult = await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
                 ctx: ctxPayload,
                 cfg: cfg as MoltbotConfig,
                 dispatcherOptions: {
-                  deliver: async (payload) => {
-                    // Send reply via email
+                  deliver: async (payload, info) => {
+                    ctx.log?.debug?.(`[email] Deliver called - kind: ${info.kind}, hasText: ${!!payload.text}`);
+                    
+                    // Send reply via email for final replies
                     if (payload.text) {
                       try {
                         const subject = `Re: ${msg.subject || "[Moltbot] Message"}`;
-                        await sendEmail(gmailClient, senderEmail, subject, payload.text);
-                        ctx.log?.info?.(`[email] Sent reply to ${senderEmail}`);
+                        await sendEmail(gmailClient, senderEmail, subject, payload.text, msg.threadId);
+                        ctx.log?.info?.(`[email] Sent ${info.kind} reply to ${senderEmail} (${payload.text.length} chars)`);
                       } catch (err: any) {
                         ctx.log?.error?.(`[email] Failed to send reply: ${err.message}`);
+                        throw err;  // Re-throw to trigger onError
                       }
                     }
                   },
@@ -274,6 +285,8 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
                   },
                 },
               });
+              
+              ctx.log?.info?.(`[email] Dispatch completed - queuedFinal: ${dispatchResult?.queuedFinal}`);
             }
           } catch (error: any) {
             ctx.log?.error?.(`[email] Poll error: ${error.message}`);
