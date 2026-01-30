@@ -4,7 +4,7 @@ import {
   type ChannelDock,
   type ChannelPlugin,
   type MoltbotConfig,
-} from "clawdbot/plugin-sdk";
+} from "openclaw/plugin-sdk";
 import { z } from "zod";
 
 import type { EmailChannelConfig, EmailCredentials } from "./types.js";
@@ -319,6 +319,7 @@ export const emailPlugin: ChannelPlugin<ResolvedEmailAccount> = {
                       try {
                         // Generate dynamic subject from reply content
                         const subject = generateSubjectFromContent(payload.text, account.config.subjectPrefix);
+                        ctx.log?.info?.(`[email] Generated subject: "${subject}" from content: "${payload.text.substring(0, 50)}..."`);
                         await sendEmail(gmailClient, senderEmail, subject, payload.text, msg.threadId);
                         ctx.log?.info?.(`[email] Sent ${info.kind} reply to ${senderEmail} (${payload.text.length} chars)`);
                       } catch (err: any) {

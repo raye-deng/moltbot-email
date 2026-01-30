@@ -128,6 +128,20 @@ export async function markAsRead(
   });
 }
 
+/**
+ * Encode a string for use in email headers (RFC 2047)
+ * Non-ASCII characters are encoded as =?UTF-8?B?base64?=
+ */
+function encodeHeaderValue(value: string): string {
+  // Check if the string contains non-ASCII characters
+  if (/^[\x00-\x7F]*$/.test(value)) {
+    return value; // Pure ASCII, no encoding needed
+  }
+  // Encode as UTF-8 Base64 per RFC 2047
+  const encoded = Buffer.from(value, "utf-8").toString("base64");
+  return `=?UTF-8?B?${encoded}?=`;
+}
+
 export async function sendEmail(
   gmail: gmail_v1.Gmail,
   to: string,
@@ -135,9 +149,12 @@ export async function sendEmail(
   body: string,
   threadId?: string
 ): Promise<string> {
+  // Encode subject for non-ASCII characters
+  const encodedSubject = encodeHeaderValue(subject);
+  
   const message = [
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodedSubject}`,
     "Content-Type: text/plain; charset=utf-8",
     "",
     body,

@@ -1,8 +1,8 @@
 /**
  * Moltbot Email Plugin - Entry Point
  */
-import type { MoltbotPluginApi } from "clawdbot/plugin-sdk";
-import { emptyPluginConfigSchema } from "clawdbot/plugin-sdk";
+import type { MoltbotPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 
 import { emailDock, emailPlugin } from "./src/channel.js";
 import { setEmailRuntime } from "./src/runtime.js";
